@@ -3,8 +3,12 @@ import ply.yacc as yacc
 import errors
 from declaration import *
 from lex import tokens
+import pprint
 
 log_erros = {}
+
+transcription = open("transcricao.txt", "w")
+
 
 # Parsing rules
 precedence = (
@@ -29,7 +33,9 @@ def p_programa(t):
     PROGRAMA : DECLARACOES BLOCO
     '''
     t[0] = (t[1], t[2])
-    print(t[0])
+    pp = pprint.PrettyPrinter(width=30, compact=True)
+    formatted_data = pp.pformat(t[0])
+    transcription.write(formatted_data)
 
 
 def p_declaracoes(t):
