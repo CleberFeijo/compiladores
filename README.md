@@ -1,2 +1,2 @@
 # Projeto_Compiladores
- Projeto para a matéria de Compiladores para a Universidade Federal Fluminense
+ Projeto para a matéria de Compiladores da Universidade Federal Fluminense
