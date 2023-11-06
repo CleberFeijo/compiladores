@@ -72,7 +72,7 @@ begin
     begin
         if a[i] < result then : result := a[i];
         i := i + 1;
-    end
+    end;
     return result;
 end
 
@@ -92,6 +92,9 @@ begin
 end
 """
 
-grammar.parser.parse(data)
+try:
+    grammar.parser.parse(data)
+except ValueError as e:
+    print(f"EOF atingido.")
 for linha, erro in grammar.log_erros.items():
-    print(f"Erro de sintaxe na linha {linha}: {erro}")
+    print(f"Erro de sintaxe na linha {linha}: {erro['valor']}")

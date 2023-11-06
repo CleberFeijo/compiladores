@@ -10,6 +10,15 @@ log_erros = {}
 transcription = open("transcricao.txt", "w")
 
 
+def lista_continua(lista):
+    min_valor = min(lista)
+    max_valor = max(lista)
+
+    esperado = set(range(min_valor, max_valor + 1))
+
+    return set(lista) == esperado
+
+
 # Parsing rules
 precedence = (
     ('left', 'LEFTPARENTHESIS', 'RIGHTPARENTHESIS'),
@@ -380,10 +389,18 @@ def p_numero(t):
 
 def p_error(t):
     parser.errok()
+    if not t:
+        raise ValueError()
     if t.lineno not in log_erros.keys():
-        log_erros[t.lineno] = f"{t.value}"
+        log_erros[t.lineno] = {
+            "valor": f"{t.value}",
+            "colunas": [t.lexpos + i for i in range(len(t.value))]
+        }
     else:
-        log_erros[t.lineno] += f" {t.value}"
+        aux_column = log_erros[t.lineno]["colunas"] + [t.lexpos - 1] + [t.lexpos + i for i in range(len(str(t.value)))]
+        if not lista_continua(aux_column):
+            log_erros[t.lineno]["valor"] += f" {t.value}"
+        log_erros[t.lineno]["colunas"] = aux_column
 
 
 parser = yacc.yacc(method='LALR', start='PROGRAMA')
