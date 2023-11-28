@@ -1,0 +1,118 @@
+[
+    {
+        "nome": "A",
+        "tipo": "integer",
+        "valor": null,
+        "estrutura": null,
+        "local": "global"
+    },
+    {
+        "nome": "B",
+        "tipo": "integer",
+        "valor": null,
+        "estrutura": null,
+        "local": "global"
+    },
+    {
+        "nome": "C",
+        "tipo": "integer",
+        "valor": null,
+        "estrutura": null,
+        "local": "global"
+    },
+    {
+        "nome": "D",
+        "tipo": "integer",
+        "valor": null,
+        "estrutura": null,
+        "local": "global"
+    },
+    {
+        "nome": "E",
+        "tipo": "array",
+        "valor": "vetor",
+        "estrutura": {
+            "nome": "vetor",
+            "tipo": "integer",
+            "tamanho": 15,
+            "valores": []
+        },
+        "local": "global"
+    },
+    {
+        "nome": "F",
+        "tipo": "record",
+        "valor": "aluno",
+        "estrutura": {
+            "nome": "aluno",
+            "valores": {
+                "nota1": {
+                    "tipo": "real"
+                },
+                "nota2": {
+                    "tipo": "real"
+                },
+                "nota3": {
+                    "tipo": "real"
+                }
+            }
+        },
+        "local": "global"
+    },
+    {
+        "nome": "i",
+        "tipo": "const",
+        "valor": "integer",
+        "estrutura": null,
+        "local": "fatorial"
+    },
+    {
+        "nome": "result",
+        "tipo": "const",
+        "valor": "integer",
+        "estrutura": null,
+        "local": "fatorial"
+    },
+    {
+        "nome": "i",
+        "tipo": "const",
+        "valor": "integer",
+        "estrutura": null,
+        "local": "exp"
+    },
+    {
+        "nome": "result",
+        "tipo": "const",
+        "valor": "integer",
+        "estrutura": null,
+        "local": "exp"
+    },
+    {
+        "nome": "i",
+        "tipo": "const",
+        "valor": "integer",
+        "estrutura": null,
+        "local": "maior"
+    },
+    {
+        "nome": "I",
+        "tipo": "const",
+        "valor": "integer",
+        "estrutura": null,
+        "local": "menor"
+    },
+    {
+        "nome": "result",
+        "tipo": "const",
+        "valor": "integer",
+        "estrutura": null,
+        "local": "menor"
+    },
+    {
+        "nome": "m",
+        "tipo": "const",
+        "valor": "integer",
+        "estrutura": null,
+        "local": "media"
+    }
+]

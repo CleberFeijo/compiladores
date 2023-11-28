@@ -1,6 +1,6 @@
 #!/usr/bin/python
-import grammar
 import errors
+import grammar
 
 data = """
 const TAM == 10;
@@ -9,7 +9,8 @@ const TAM == 10;
 type vetor == array [15] of integer;
      aluno == record
         nota1 : real;
-        nota2 : real
+        nota2 : real;
+        nota3 : real
     end;
     
 var A, B, C, D : integer;
@@ -21,6 +22,7 @@ begin
     write MSG;
     read F.nota1;
     read F.nota2;
+    read F.nota3;
 end
 
 function fatorial(a:integer) : integer
@@ -38,6 +40,7 @@ end
 
 function exp(a: real; b: real) : real
 var i,result : integer;
+
 begin
     i := 1;
     result := a;
@@ -81,6 +84,11 @@ var m : integer;
 begin
     m := maior(a) + menor(a);
     return m / 2;
+end
+
+function teste : integer
+begin
+    return 2 + 2;
 end
 
 begin

@@ -1,0 +1,30 @@
+{
+    "A": {
+        "tipo": "const",
+        "valor": "integer"
+    },
+    " B": {
+        "tipo": "const",
+        "valor": "integer"
+    },
+    " C": {
+        "tipo": "const",
+        "valor": "integer"
+    },
+    " D": {
+        "tipo": "const",
+        "valor": "integer"
+    },
+    "A, B, C, D": {
+        "tipo": "const",
+        "valor": "integer"
+    },
+    "E": {
+        "tipo": "const",
+        "valor": "vetor"
+    },
+    "F": {
+        "tipo": "const",
+        "valor": "aluno"
+    }
+}

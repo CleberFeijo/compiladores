@@ -1,9 +1,11 @@
 #!/usr/bin/python
+import pprint
+
 import ply.yacc as yacc
+
 import errors
 from declaration import *
 from lex import tokens
-import pprint
 
 log_erros = {}
 
@@ -63,7 +65,7 @@ def p_def_const(t):
               | empty
     '''
     if len(t) > 2:
-        t[0] = ('DEF_CONST', t[2], t[4])
+        t[0] = ('DEF_CONST', [t[2], *t[4]])
     else:
         t[0] = None
 
@@ -74,9 +76,9 @@ def p_list_const(t):
                | empty
     '''
     if len(t) == 4:
-        t[0] = [t[1]] + t[3]
+        t[0] = (t[1], *t[3])
     else:
-        t[0] = []
+        t[0] = ()
 
 
 def p_constante(t):
@@ -100,7 +102,7 @@ def p_def_tipos(t):
               | empty
     '''
     if len(t) > 2:
-        t[0] = ('DEF_TIPOS', t[2], t[4])
+        t[0] = ('DEF_TIPOS', [t[2], t[4]])
     else:
         t[0] = []
 
@@ -111,9 +113,9 @@ def p_list_tipos(t):
                | empty
     '''
     if len(t) > 2:
-        t[0] = [t[1]] + t[3]
+        t[0] = t[1] + t[3]
     else:
-        t[0] = []
+        t[0] = ()
 
 
 def p_tipo(t):
@@ -154,7 +156,7 @@ def p_lista_campos(t):
                 | empty
     '''
     if len(t) > 2:
-        t[0] = [t[2]] + t[3]
+        t[0] = t[2] + t[3]
     else:
         t[0] = []
 
@@ -165,7 +167,7 @@ def p_def_var(t):
             | empty
     '''
     if len(t) > 2:
-        t[0] = ('DEF_VAR', t[2], t[4])
+        t[0] = ('DEF_VAR', [t[2], *t[4]])
     else:
         t[0] = None
 
@@ -176,9 +178,9 @@ def p_list_var(t):
              | empty
     '''
     if len(t) > 2:
-        t[0] = [t[1]] + t[3]
+        t[0] = (t[1], *t[3])
     else:
-        t[0] = []
+        t[0] = ()
 
 
 def p_variavel(t):
@@ -210,7 +212,7 @@ def p_def_rot(t):
     if len(t) == 5:
         t[0] = ('DEF_ROT', t[1], t[2], t[3], t[4])
     else:
-        t[0] = []
+        t[0] = () 
 
 
 def p_nome_rotina(t):
@@ -218,7 +220,7 @@ def p_nome_rotina(t):
     NOME_ROTINA : FUNCTION ID PARAM_ROT COLON TIPO_DADO
                 | PROCEDURE ID PARAM_ROT
     '''
-    if len(t) == 6:
+    if len(t) > 4:
         t[0] = ('NOME_ROTINA', t[1], t[2], t[3], t[4], t[5])
     else:
         t[0] = ('NOME_ROTINA', t[1], t[2], t[3])
@@ -232,7 +234,7 @@ def p_param_rot(t):
     if len(t) > 2:
         t[0] = ('PARAM_ROT', t[1], t[2], t[3])
     else:
-        t[0] = ('PARAM_ROT', t[1])
+        t[0] = None
 
 
 def p_bloco(t):
@@ -241,7 +243,7 @@ def p_bloco(t):
           | COLON COMANDO
     '''
     if len(t) == 6:
-        t[0] = ('BLOCO', t[2], t[4])
+        t[0] = ('BLOCO', [t[2], *t[4]])
     else:
         t[0] = ('BLOCO', t[2])
 
@@ -252,9 +254,9 @@ def p_lista_com(t):
               | empty
     '''
     if len(t) > 2:
-        t[0] = [t[1]] + t[3]
+        t[0] = (t[1], *t[3])
     else:
-        t[0] = []
+        t[0] = ()
 
 
 def p_comando(t):

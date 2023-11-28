@@ -1,0 +1,16 @@
+[
+    {
+        "nome": "aluno",
+        "valores": {
+            "nota1": {
+                "tipo": "real"
+            },
+            "nota2": {
+                "tipo": "real"
+            },
+            "nota3": {
+                "tipo": "real"
+            }
+        }
+    }
+]

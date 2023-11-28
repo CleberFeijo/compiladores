@@ -1,0 +1,10 @@
+[
+    {
+        "nome": "TAM",
+        "valor": 10
+    },
+    {
+        "nome": "MSG",
+        "valor": "\"digite as notas do aluno\""
+    }
+]
