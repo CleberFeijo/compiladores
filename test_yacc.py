@@ -38,7 +38,7 @@ begin
     return result;
 end
 
-function exp(a: real; b: real) : real
+function exp(a: integer; b: integer) : real
 var i,result : integer;
 
 begin
@@ -54,26 +54,13 @@ begin
 end
 
 function maior(a : vetor) : integer
-var i : integer;
+var i, result : integer;
 begin
     i := 0;
-    result := a[0];
+    result := a[1];
     while i < 15 do
     begin
         if a[i] > result then : result := a[i];
-        i := i + 1;
-    end;
-    return result;
-end
-
-function menor(a : vetor) : integer
-var I, result : integer;
-begin
-    i := 0;
-    result := a[0];
-    while i < 15 do
-    begin
-        if a[i] < result then : result := a[i];
         i := i + 1;
     end;
     return result;
@@ -89,6 +76,19 @@ end
 function teste : integer
 begin
     return 2 + 2;
+end
+
+function menor(a : vetor) : integer
+var i, result : integer;
+begin
+    i := 0;
+    result := a[1];
+    while i < 15 do
+    begin
+        if a[i] < result then : result := a[i];
+        i := i + 1;
+    end;
+    return result;
 end
 
 begin

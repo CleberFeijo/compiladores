@@ -5,20 +5,25 @@ from semantic_aux import get_info
 
 declared_identifiers = set()
 type_ = {
-    "int": int,
-    "str": str,
-    "list": list,
-    "record": dict,
+    "integer": int,
+    "string": str,
+    "array": "array",
+    "record": "record",
     "bool": bool,
     "real": float,
+    int: int,
+    str: str,
+    list: "array",
+    bool: bool,
+    float: float
 }
+ids = set()
 
 
 def check_declaration(_iter):
     """
     Checar se o identificador atribuído já foi utilizado anteriormente no mesmo escopo.
     """
-    ids = set()
     for _id in _iter:
         if _id.get("local"):
             if (_id["nome"], _id["local"]) in ids:
@@ -26,131 +31,227 @@ def check_declaration(_iter):
             else:
                 ids.add((_id["nome"], _id["local"]))
         else:
-            if _id["nome"] in ids:
+            if (_id["nome"], "global") in ids:
                 raise ValueError(f"Identificador '{_id['nome']}' já foi declarado.")
             else:
-                ids.add(_id["nome"])
+                ids.add((_id["nome"], "global"))
 
-def check_type_compatibility(left_expr, right_expr, operation):
+
+
+def create_atribs(
+    json_functions: list,
+    json_variaveis: list,
+    json_consts: list
+):
+    global atribuiveis
+    atribuiveis = {}
+    for var in json_variaveis:
+        nome = var["nome"]
+        if var["local"] != "global":
+            nome = var["nome"] + "." + var["local"]
+        atribuiveis[nome] = {
+            "tipo": var["tipo"],
+            "local": var["local"],
+            "estrutura": var["estrutura"],
+            "from": "var"
+        }
+    for func in json_functions:
+        atribuiveis[func["nome"]] = {
+            "tipo": func["dados"]["returns"],
+            "params": func["dados"]["params"],
+            "local": "global",
+            "from": "func"
+        }
+    for const in json_consts:
+        atribuiveis[const["nome"]] = {
+            "tipo": type(const["valor"]),
+            "local": "global",
+            "from": "const"
+        }
+    for func in json_functions:
+        for param in func["dados"]["params"].keys():
+            name = param + "." + func["nome"]
+            atribuiveis[name] = {
+                "tipo": func["dados"]["params"][param],
+                "local": func["nome"],
+                "from": "var"
+            }
+
+
+def check_comands(
+    json_comandos: list,
+    json_functions: list
+):
     """
-    TODO - Checar se a operação matemática faz sentido
+    Checar se a variável atribuída existe e se o tipo é igual
     """
-    left_type = type(left_expr)
-    right_type = type(right_expr)
+    for comando in json_comandos:
+        if comando["nome_comando"] != "ATRIB":
+            if (comando["variavel"], "global") not in ids:
+                raise ValueError(
+                    f"Tentativa de atribuir a uma variável não \
+                    declarada: {comando['variavel']}, local: global."
+                )
+            exp_type = check_exp(comando["exp"], "global")
+            if type_[atribuiveis[comando["variavel"]]["tipo"]] != type_[exp_type]:
+                raise ValueError(
+                    f"Tentativa de atribuir a uma variável um valor \
+                    não condizente: Exp: {comando} \
+                    Tipo_var: {type_[atribuiveis[comando['variavel']]['tipo']]}.\
+                    Tipo_atrib: {type_[exp_type]}"
+                )
+        else:
+            check_exp(comando["exp"], "global")
+            if comando["nome"]:
+                check_record_field_access(comando["variavel"], comando['nome'])
 
-    if left_type != right_type:
-        raise ValueError(
-            f"Operação '{operation}' entre tipos \
-            incompatíveis: {left_type} e {right_type}."
-        )
+    for func in json_functions:
+        for comando in func["comandos"]:
+            if comando["nome_comando"] == "ATRIB":
+                if (comando["variavel"], func["nome"]) not in ids:
+                    raise ValueError(
+                        f"Tentativa de atribuir a uma variável não \
+                        declarada: {comando['variavel']}, local: {func['nome']}."
+                    )
+                exp_type = check_exp(comando["exp"], func["nome"])
+                if not atribuiveis.get(comando["variavel"]):
+                    comando["variavel"] += "."+func["nome"]
+                try:
+                    if type_[atribuiveis[comando["variavel"]]["tipo"]] != type_[exp_type]:
+                        raise ValueError(
+                            f"Tentativa de atribuir a uma variável um valor \
+                            não condizente: Exp: {comando} \
+                            Tipo_var: {type_[atribuiveis[comando['variavel']]['tipo']]}.\
+                            Tipo_atrib: {type_[exp_type]}"
+                        )
+                except KeyError:
+                    is_array = get_info(atribuiveis[comando["variavel"]]["tipo"], "array")
+                    is_record = get_info(atribuiveis[comando["variavel"]]["tipo"], "record")
+                    if is_array:
+                        atribuiveis[comando["variavel"]]["tipo"] = "array"
+                    elif is_record:
+                        atribuiveis[comando["variavel"]]["tipo"] = "record"
+                    if type_[atribuiveis[comando["variavel"]]["tipo"]] != type_[exp_type]:
+                        raise ValueError(
+                            f"Tentativa de atribuir a uma variável um valor \
+                            não condizente: Exp: {comando} \
+                            Tipo_var: {type_[atribuiveis[comando['variavel']]['tipo']]}.\
+                            Tipo_atrib: {type_[exp_type]}"
+                        )
+            else:
+                check_exp(comando["exp"], func["nome"])
+                if comando["nome"]:
+                    check_record_field_access(comando["variavel"], comando['nome'])
 
 
-def check_assignment(variable):
-    """
-    TODO - Checar se a variável atribuída existe
-    """
-    if variable not in declared_identifiers:
-        raise ValueError(
-            f"Tentativa de atribuir a uma variável não \
-            declarada: {variable}."
-        )
+def check_exp(exp: list | int | str | bool, local: str) -> str:
+    if not isinstance(exp, list) and not isinstance(exp, tuple):
+        if isinstance(exp, str):
+            var = exp
+            is_list = False
+            index = None
+            if "[" in exp:
+                var = exp.split('[')[0]
+                index = int(exp.split('[')[1].replace(']', ''))
+                if index < 1:
+                    raise ValueError(
+                        f"Indice fora de alcance na exp {exp}."
+                    )
+                is_list = True
+            if atribuiveis.get(var):
+                if is_list and atribuiveis[var]['tipo'] != "array":
+                    if not get_info(atribuiveis[var]['tipo'], "array"):
+                        raise ValueError(
+                            f"Utilização errada do indice ([])  na exp {exp}. tipo {atribuiveis[var]['tipo']}"
+                        )
+                    atribuiveis[var]['estrutura'] = get_info(atribuiveis[var]['tipo'], "array")
+                    atribuiveis[var]["tipo"] = atribuiveis[var]['estrutura']["tipo"]
+                if is_list and atribuiveis[var]['estrutura']['tamanho'] < index:
+                    raise ValueError(
+                        f"Indice fora de alcance."
+                    )
+                return atribuiveis[var]["tipo"]
+            elif atribuiveis.get(var+"."+local):
+                var += "." + local
+                if is_list and atribuiveis[var]['tipo'] != "array":
+                    if not get_info(atribuiveis[var]['tipo'], "array"):
+                        raise ValueError(
+                            f"Utilização errada do indice ([])  na exp {exp}. tipo {atribuiveis[var]['tipo']}"
+                        )
+                    atribuiveis[var]['estrutura'] = get_info(atribuiveis[var]['tipo'], "array")
+                    atribuiveis[var]["tipo"] = atribuiveis[var]['estrutura']["tipo"]
+                if is_list and atribuiveis[var]['estrutura']['tamanho'] < index:
+                    raise ValueError(
+                        f"Indice fora de alcance  na exp {exp}."
+                    )
+                return atribuiveis[var]["tipo"]
+        return type(exp)
 
-
-def check_variable_usage(variable):
-    """
-    TODO - Checar se a variável declara foi utilizada
-    """
-    if variable not in declared_identifiers:
-        raise ValueError(
-            f"Tentativa de usar uma variável não \
-            declarada: {variable}."
-        )
-
-
-def check_function_call(name, arguments):
-    """
-    TODO - Checar se a função chamada existe, se a quantidade de parâmetros esta corretos e se os tipos estão corretos
-    """
-    function_info = get_info(name, "func")
-
-    if not function_info:
-        raise ValueError(f"Chamada para função desconhecida: {name}.")
-
-    expected_num_params = len(function_info["parametros"])
-    actual_num_params = len(arguments)
-
-    if expected_num_params != actual_num_params:
-        raise ValueError(
-            f"Chamada para {name} com número incorreto de parâmetros. \
-            Esperado: {expected_num_params}, Obtido: {actual_num_params}."
-        )
-
-    for arg, param_type in zip(arguments, function_info["parameters"]):
-        arg_type = type(arg)
-        if arg_type != param_type:
+    if isinstance(exp[0], str) and isinstance(exp[1], list):
+        if atribuiveis.get(exp[0]):
+            if atribuiveis[exp[0]]['from'] == "func":
+                if len(exp[1]) != len(atribuiveis[exp[0]]['params']):
+                    raise ValueError(
+                        f"Quantidade errada de parâmetros sendo passados para função {exp[0]}. \
+                        QTD_Aceita: {len(atribuiveis[exp[0]]['params'])}, \
+                        QTD_Enviada: {len(exp[1])}."
+                    )
+                for count, xp in enumerate(exp[1]):
+                    if check_exp(xp, local) != list(atribuiveis[exp[0]]['params'].values())[count]:
+                        if check_exp(xp, local) not in ["array", "record"]:
+                            raise ValueError(
+                                f"Tipo errado de parâmetros sendo passados para função {exp[0]}. \
+                                Param_Aceito: {list(atribuiveis[exp[0]]['params'].values())[count]}, \
+                                Param_Enviado: {xp}, tipo: {check_exp(xp, local)}. Local: {local}"
+                            )
+                        elif not get_info(list(atribuiveis[exp[0]]['params'].values())[count], check_exp(xp, local)):
+                            raise ValueError(
+                                f"Tipo errado de parâmetros sendo passados para função {exp[0]}. \
+                                Param_Aceito: {list(atribuiveis[exp[0]]['params'].values())[count]}, \
+                                Param_Enviado: {xp}, tipo: {check_exp(xp, local)}. Local: {local}"
+                            )
+                return atribuiveis[exp[0]]['tipo']
             raise ValueError(
-                f"Tipo de parâmetro incorreto na chamada para {name}. \
-                Esperado: {param_type}, Obtido: {arg_type}."
+                f"Tentativa de passar parâmetros para uma não função."
             )
-
-
-def check_logical_expression(expr):
-    """
-    TODO - Checar se a expressão lógica retorna um booleano corretamente.
-    """
-    if type(expr) is bool:
-        raise ValueError("A expressão lógica deve resultar em um valor booleano.")
-
-
-def check_array(name):
-    """
-    TODO - Checar se os valores atribuídos ao array respeitam o tipo e o tamanho
-    """
-    array_info = get_info(name, "array")
-
-    if not array_info:
-        raise ValueError(f"Array desconhecido: {name}.")
-
-    for index in array_info["valores"]:
-        if type_[array_info["tipo"]] is not type(index):
-            raise ValueError(
-                f"O índice do array deve ser do tipo {array_info['tipo']}."
-            )
-
-
-def check_record_field_access(name, field):
-    """
-    TODO - Checar se o campo que está sendo acessado existe no record
-    """
-    record_info = get_info(name, "record")
-
-    if not record_info:
         raise ValueError(
-            f"Tentativa de acessar campos de um registro \
-            desconhecido: {name}."
+            f"Tentativa de atribuir uma função não \
+            declarada: {exp[0]}."
+        )
+    if len(exp) > 2:
+        types = []
+        for i in range(0, len(exp), 2):
+            if isinstance(exp[i], list) or isinstance(exp[i], tuple):
+                types.append(check_exp(exp[i], local))
+            elif atribuiveis.get(exp[i]):
+                types.append(type_[atribuiveis[exp[i]]['tipo']])
+            elif atribuiveis.get(str(exp[i]) + "." + local):
+                types.append(type_[atribuiveis[str(exp[i]) + "." + local]['tipo']])
+            else:
+                types.append(type(exp[i]))
+        for elem in types:
+            if not type_[elem] == type_[types[0]]:
+                raise ValueError(
+                    f"Expressão com variáveis/funções não compatíveis. \
+                    Expressão: {exp}"
+                )
+
+        return types[0]
+
+
+def check_record_field_access(var, nome):
+    """
+    Checar se o campo que está sendo acessado existe no record
+    """
+    record_info = atribuiveis.get(var)
+
+    if not record_info or record_info["tipo"] != "record":
+        raise ValueError(
+            f"Foi utilizado (.) em uma variável que não é record: {var}."
         )
 
-    if field not in record_info["fields"]:
-        raise ValueError(f"Campo desconhecido '{field}' em {name}.")
-
-
-def check_function_return(name, return_expr):
-    """
-    TODO - Checar se o retorno das funções é de mesmo tipo que o retorno salvo para a função
-    """
-    function_info = get_info(name, "func")
-
-    if not function_info:
-        raise ValueError(f"Tentativa de retornar de uma função desconhecida: {name}.")
-
-    expected_return_type = function_info["return_type"]
-    actual_return_type = type(return_expr)
-
-    if expected_return_type != actual_return_type:
-        raise ValueError(
-            f"Tipo de retorno incorreto para a função {name}. \
-        Esperado: {expected_return_type}, Obtido: {actual_return_type}."
-        )
+    if nome not in record_info["estrutura"]["valores"].keys():
+        raise ValueError(f"Campo desconhecido '{nome}' em {var}.")
 
 
 def salvar_json_const(consts: list):
@@ -181,7 +282,7 @@ def salvar_json_tipos(tipos: list):
                 "nome": tipo[0],
                 "tipo": tipo[1][2],
                 "tamanho": tipo[1][1],
-                "valores": [],
+                "valores": []
             })
         if tipo[1][0] == "record":
             json_record.append({
@@ -238,16 +339,16 @@ def salvar_json_var(vars: list):
             for v in multi_var:
                 json_var.append({
                     "nome": v.strip(),
-                    "tipo": tipo,
-                    "valor": valor,
+                    "tipo": tipo if tipo != "const" else valor,
+                    "valor": valor if tipo != "const" else tipo,
                     "estrutura": estrutura,
                     "local": "global"
                 })
         else:
             json_var.append({
                 "nome": var[1].strip(),
-                "tipo": tipo,
-                "valor": valor,
+                "tipo": tipo if tipo != "const" else valor,
+                "valor": valor if tipo != "const" else tipo,
                 "estrutura": estrutura,
                 "local": "global"
             })
@@ -312,16 +413,16 @@ def criar_json_var_function(func: tuple):
         for v in multi_var:
             json_var.append({
                 "nome": v.strip(),
-                "tipo": tipo,
-                "valor": valor,
+                "tipo": tipo if tipo != "const" else valor,
+                "valor": valor if tipo != "const" else tipo,
                 "estrutura": estrutura,
                 "local": func[1][2]
             })
     else:
         json_var.append({
             "nome": func[2][1][0][1].strip(),
-            "tipo": tipo,
-            "valor": valor,
+            "tipo": tipo if tipo != "const" else valor,
+            "valor": valor if tipo != "const" else tipo,
             "estrutura": estrutura,
             "local": func[1][2]
         })
@@ -345,7 +446,7 @@ def criar_json_comando(comandos: list):
     for comando in comandos:
         json_comandos.append({
             'nome_comando': comando.get("nome_comando"),
-            'exp': tratar_exp(comando.get('exp')) if comando.get('exp') else None,
+            'exp': tratar_exp(comando.get('exp')) if comando.get('exp') is not None else None,
             'variavel': comando.get('variavel'),
             'nome': comando.get('nome'),
             'sub_comandos': comando.get('subcomandos'),
@@ -356,20 +457,21 @@ def criar_json_comando(comandos: list):
 
 
 def tratar_exp(exp: tuple):
-    print(f"Ele entrou assim: {exp}")
     if not isinstance(exp, int) and exp[0] == "ATRIB":
         exp = exp[1]
     if isinstance(exp, int):
-        print(f"E saiu assim 1: {exp}")
+        return exp
+    if isinstance(exp, bool):
         return exp
     elif len(exp) == 2:
-        if not exp[1]:
-            print(f"E saiu assim 2: {exp[0]}")
+        if exp[1] is None:
             return exp[0]
         elif isinstance(exp[1], list):
             for count, xp in enumerate(exp[1]):
                 exp[1][count] = xp[0] if not xp[1] else xp
             return exp[0], exp[1]
+        elif isinstance(exp[1], int):
+            return f"{exp[0]}[{exp[1]}]"
         return exp
     elif isinstance(exp, tuple):
         exp = [exp[1], exp[0], exp[2]]
@@ -385,7 +487,6 @@ def tratar_exp(exp: tuple):
             elif isinstance(exp[2][1], list):
                 for count, xp in enumerate(exp[2][1]):
                     exp[2][1][count] = xp[0] if not xp[1] else xp
-        print(f"E saiu assim 3: {exp}")
         return exp
 
 
@@ -478,10 +579,9 @@ def separar_comandos(comandos):
             resultado.append({
                 'nome_comando': "ATRIB",
                 'variavel': variavel,
-                'nome': nome,
+                'nome': nome if isinstance(nome, str) else None,
                 'exp': exp[1] if exp else None
             })
-
 
     return resultado
 
@@ -492,41 +592,18 @@ def read_tree(name: str):
 
     arvore = ast.literal_eval(tree)
     defs_separadas = separar_defs(arvore)
+    count = 0
     json_const = salvar_json_const(defs_separadas["json_const"])
     json_array, json_record = salvar_json_tipos(defs_separadas["json_tipos"])
     json_var = salvar_json_var(defs_separadas["json_var"])
     json_func = salvar_json_function(defs_separadas["json_func"])
     json_var = salvar_json_var_function(defs_separadas["json_func"])
 
-    # check_declaration #
     for json_data in [json_const, json_array, json_record, json_var, json_func]:
         check_declaration(json_data)
 
     comandos = separar_blocos(arvore)
     json_comandos = salvar_json_comandos(comandos)
 
-    # check_type_compatibility #
-
-
-    # check_assignment #
-
-
-    # check_variable_usage #
-
-
-    # check_function_call #
-
-
-    # check_logical_expression #
-
-
-    # check_array #
-
-
-    # check_record_field_access #
-
-
-    # check_function_return #
-
-
-read_tree("transcricao.txt")
+    create_atribs(json_func, json_var, json_const)
+    check_comands(json_comandos, json_func)

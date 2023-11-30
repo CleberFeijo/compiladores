@@ -15,3 +15,7 @@ __pycache__
 __pycache__/
 
 transcricao.txt
+
+json*
+
+trash.py
