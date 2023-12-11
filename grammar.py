@@ -3,8 +3,6 @@ import pprint
 
 import ply.yacc as yacc
 
-import errors
-from declaration import *
 from lex import tokens
 
 log_erros = {}

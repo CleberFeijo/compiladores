@@ -1,9 +1,5 @@
 import ast
-import json
 
-from semantic_aux import get_info
-
-declared_identifiers = set()
 type_ = {
     "integer": int,
     "string": str,
@@ -17,134 +13,9 @@ type_ = {
     bool: bool,
     float: float
 }
-ids = set()
 
 
-def check_declaration(_iter):
-    """
-    Checar se o identificador atribuído já foi utilizado anteriormente no mesmo escopo.
-    """
-    for _id in _iter:
-        if _id.get("local"):
-            if (_id["nome"], _id["local"]) in ids:
-                raise ValueError(f"Identificador '{_id['nome']}' já foi declarado.")
-            else:
-                ids.add((_id["nome"], _id["local"]))
-        else:
-            if (_id["nome"], "global") in ids:
-                raise ValueError(f"Identificador '{_id['nome']}' já foi declarado.")
-            else:
-                ids.add((_id["nome"], "global"))
-
-
-
-def create_atribs(
-    json_functions: list,
-    json_variaveis: list,
-    json_consts: list
-):
-    global atribuiveis
-    atribuiveis = {}
-    for var in json_variaveis:
-        nome = var["nome"]
-        if var["local"] != "global":
-            nome = var["nome"] + "." + var["local"]
-        atribuiveis[nome] = {
-            "tipo": var["tipo"],
-            "local": var["local"],
-            "estrutura": var["estrutura"],
-            "from": "var"
-        }
-    for func in json_functions:
-        atribuiveis[func["nome"]] = {
-            "tipo": func["dados"]["returns"],
-            "params": func["dados"]["params"],
-            "local": "global",
-            "from": "func"
-        }
-    for const in json_consts:
-        atribuiveis[const["nome"]] = {
-            "tipo": type(const["valor"]),
-            "local": "global",
-            "from": "const"
-        }
-    for func in json_functions:
-        for param in func["dados"]["params"].keys():
-            name = param + "." + func["nome"]
-            atribuiveis[name] = {
-                "tipo": func["dados"]["params"][param],
-                "local": func["nome"],
-                "from": "var"
-            }
-
-
-def check_comands(
-    json_comandos: list,
-    json_functions: list
-):
-    """
-    Checar se a variável atribuída existe e se o tipo é igual
-    """
-    for comando in json_comandos:
-        if comando["nome_comando"] != "ATRIB":
-            if (comando["variavel"], "global") not in ids:
-                raise ValueError(
-                    f"Tentativa de atribuir a uma variável não \
-                    declarada: {comando['variavel']}, local: global."
-                )
-            exp_type = check_exp(comando["exp"], "global")
-            if type_[atribuiveis[comando["variavel"]]["tipo"]] != type_[exp_type]:
-                raise ValueError(
-                    f"Tentativa de atribuir a uma variável um valor \
-                    não condizente: Exp: {comando} \
-                    Tipo_var: {type_[atribuiveis[comando['variavel']]['tipo']]}.\
-                    Tipo_atrib: {type_[exp_type]}"
-                )
-        else:
-            check_exp(comando["exp"], "global")
-            if comando["nome"]:
-                check_record_field_access(comando["variavel"], comando['nome'])
-
-    for func in json_functions:
-        for comando in func["comandos"]:
-            if comando["nome_comando"] == "ATRIB":
-                if (comando["variavel"], func["nome"]) not in ids:
-                    raise ValueError(
-                        f"Tentativa de atribuir a uma variável não \
-                        declarada: {comando['variavel']}, local: {func['nome']}."
-                    )
-                exp_type = check_exp(comando["exp"], func["nome"])
-                if not atribuiveis.get(comando["variavel"]):
-                    comando["variavel"] += "."+func["nome"]
-                try:
-                    if type_[atribuiveis[comando["variavel"]]["tipo"]] != type_[exp_type]:
-                        raise ValueError(
-                            f"Tentativa de atribuir a uma variável um valor \
-                            não condizente: Exp: {comando} \
-                            Tipo_var: {type_[atribuiveis[comando['variavel']]['tipo']]}.\
-                            Tipo_atrib: {type_[exp_type]}"
-                        )
-                except KeyError:
-                    is_array = get_info(atribuiveis[comando["variavel"]]["tipo"], "array")
-                    is_record = get_info(atribuiveis[comando["variavel"]]["tipo"], "record")
-                    if is_array:
-                        atribuiveis[comando["variavel"]]["tipo"] = "array"
-                    elif is_record:
-                        atribuiveis[comando["variavel"]]["tipo"] = "record"
-                    if type_[atribuiveis[comando["variavel"]]["tipo"]] != type_[exp_type]:
-                        raise ValueError(
-                            f"Tentativa de atribuir a uma variável um valor \
-                            não condizente: Exp: {comando} \
-                            Tipo_var: {type_[atribuiveis[comando['variavel']]['tipo']]}.\
-                            Tipo_atrib: {type_[exp_type]}"
-                        )
-            else:
-                check_exp(comando["exp"], func["nome"])
-                if comando["nome"]:
-                    check_record_field_access(comando["variavel"], comando['nome'])
-
-
-def check_exp(exp: list | int | str | bool, local: str) -> str:
+def check_exp(exp: list | int | str | bool, local: str, atribuiveis: dict) -> tuple:
     if not isinstance(exp, list) and not isinstance(exp, tuple):
         if isinstance(exp, str):
             var = exp
@@ -158,75 +29,83 @@ def check_exp(exp: list | int | str | bool, local: str) -> str:
                         f"Indice fora de alcance na exp {exp}."
                     )
                 is_list = True
-            if atribuiveis.get(var):
-                if is_list and atribuiveis[var]['tipo'] != "array":
-                    if not get_info(atribuiveis[var]['tipo'], "array"):
+            if atribuiveis.get(local).get(var):
+                if is_list and atribuiveis[local][var]['tipo'] != "array":
+                    if type_[atribuiveis["global"][atribuiveis[local][var]['tipo']]['tipo']] != "array":
                         raise ValueError(
-                            f"Utilização errada do indice ([])  na exp {exp}. tipo {atribuiveis[var]['tipo']}"
+                            f"Utilização errada do indice ([])  na exp {exp}. tipo {atribuiveis[local][var]['tipo']}"
                         )
-                    atribuiveis[var]['estrutura'] = get_info(atribuiveis[var]['tipo'], "array")
-                    atribuiveis[var]["tipo"] = atribuiveis[var]['estrutura']["tipo"]
-                if is_list and atribuiveis[var]['estrutura']['tamanho'] < index:
+                if is_list and atribuiveis["global"][atribuiveis[local][var]['tipo']]["valor"] < index:
                     raise ValueError(
                         f"Indice fora de alcance."
                     )
-                return atribuiveis[var]["tipo"]
-            elif atribuiveis.get(var+"."+local):
-                var += "." + local
-                if is_list and atribuiveis[var]['tipo'] != "array":
-                    if not get_info(atribuiveis[var]['tipo'], "array"):
-                        raise ValueError(
-                            f"Utilização errada do indice ([])  na exp {exp}. tipo {atribuiveis[var]['tipo']}"
-                        )
-                    atribuiveis[var]['estrutura'] = get_info(atribuiveis[var]['tipo'], "array")
-                    atribuiveis[var]["tipo"] = atribuiveis[var]['estrutura']["tipo"]
-                if is_list and atribuiveis[var]['estrutura']['tamanho'] < index:
-                    raise ValueError(
-                        f"Indice fora de alcance  na exp {exp}."
-                    )
-                return atribuiveis[var]["tipo"]
-        return type(exp)
+                return atribuiveis[local][var]['tipo'], exp
+        return type(exp), exp
 
-    if isinstance(exp[0], str) and isinstance(exp[1], list):
-        if atribuiveis.get(exp[0]):
-            if atribuiveis[exp[0]]['from'] == "func":
-                if len(exp[1]) != len(atribuiveis[exp[0]]['params']):
-                    raise ValueError(
-                        f"Quantidade errada de parâmetros sendo passados para função {exp[0]}. \
-                        QTD_Aceita: {len(atribuiveis[exp[0]]['params'])}, \
-                        QTD_Enviada: {len(exp[1])}."
-                    )
-                for count, xp in enumerate(exp[1]):
-                    if check_exp(xp, local) != list(atribuiveis[exp[0]]['params'].values())[count]:
-                        if check_exp(xp, local) not in ["array", "record"]:
-                            raise ValueError(
-                                f"Tipo errado de parâmetros sendo passados para função {exp[0]}. \
-                                Param_Aceito: {list(atribuiveis[exp[0]]['params'].values())[count]}, \
-                                Param_Enviado: {xp}, tipo: {check_exp(xp, local)}. Local: {local}"
-                            )
-                        elif not get_info(list(atribuiveis[exp[0]]['params'].values())[count], check_exp(xp, local)):
-                            raise ValueError(
-                                f"Tipo errado de parâmetros sendo passados para função {exp[0]}. \
-                                Param_Aceito: {list(atribuiveis[exp[0]]['params'].values())[count]}, \
-                                Param_Enviado: {xp}, tipo: {check_exp(xp, local)}. Local: {local}"
-                            )
-                return atribuiveis[exp[0]]['tipo']
+    elif isinstance(exp[0], str) and isinstance(exp[1], list):
+        if not atribuiveis.get(exp[0]):
             raise ValueError(
-                f"Tentativa de passar parâmetros para uma não função."
+                f"Tentativa de atribuir uma função não \
+                declarada: {exp[0]}."
             )
-        raise ValueError(
-            f"Tentativa de atribuir uma função não \
-            declarada: {exp[0]}."
-        )
-    if len(exp) > 2:
+        params = [param["tipo"] for param in atribuiveis.get(exp[0]).values() if param.get("from") == "func"]
+        if len(exp[1]) != len(params):
+            raise ValueError(
+                f"Quantidade errada de parâmetros sendo passados para função {exp[0]}. \
+                QTD_Aceita: {len(params)}, \
+                QTD_Enviada: {len(exp[1])}."
+            )
+        for count, xp in enumerate(exp[1]):
+            if check_exp(xp, local, atribuiveis)[0] != params[count]:
+                if type_[check_exp(xp, local, atribuiveis)[0]] not in ["array", "record"]:
+                    raise ValueError(
+                        f"Tipo errado de parâmetros sendo passados para função {exp[0]}. \
+                        Param_Aceito: {params[count]}, \
+                        Param_Enviado: {xp}, tipo: {check_exp(xp, local, atribuiveis)[0]}. Local: {local}"
+                    )
+                elif type_[atribuiveis["global"][params[count]]["tipo"]] != type_[check_exp(xp, local, atribuiveis)[0]]:
+                    raise ValueError(
+                        f"Tipo errado de parâmetros sendo passados para função {exp[0]}. \
+                        Param_Aceito: {params[count]}, \
+                        Param_Enviado: {xp}, tipo: {check_exp(xp, local, atribuiveis)}. Local: {local}"
+                    )
+        return atribuiveis[exp[0]]['returns']["tipo"], exp
+    elif len(exp) > 2:
         types = []
         for i in range(0, len(exp), 2):
             if isinstance(exp[i], list) or isinstance(exp[i], tuple):
-                types.append(check_exp(exp[i], local))
-            elif atribuiveis.get(exp[i]):
-                types.append(type_[atribuiveis[exp[i]]['tipo']])
-            elif atribuiveis.get(str(exp[i]) + "." + local):
-                types.append(type_[atribuiveis[str(exp[i]) + "." + local]['tipo']])
+                if not check_exp(exp[i], local, atribuiveis):
+                    continue
+                types.append(check_exp(exp[i], local, atribuiveis)[0])
+            elif atribuiveis[local].get(exp[i]):
+                types.append(type_[atribuiveis[local][exp[i]]['tipo']])
+            elif isinstance(exp[i], str):
+                var = exp[i]
+                is_list = False
+                index = None
+                if "[" in exp[i]:
+                    var = exp[i].split('[')[0]
+                    index = exp[i].split('[')[1].replace(']', '')
+                    try:
+                        index = int(index)
+                    except ValueError as e:
+                        index = 1 if isinstance(index, str) else ""
+                    if index < 1:
+                        raise ValueError(
+                            f"Indice fora de alcance na exp {exp[i]}."
+                        )
+                    is_list = True
+                if atribuiveis.get(local).get(var):
+                    if is_list and atribuiveis[local][var]['tipo'] != "array":
+                        if type_[atribuiveis["global"][atribuiveis[local][var]['tipo']]['tipo']] != "array":
+                            raise ValueError(
+                                f"Utilização errada do indice ([])  na exp {exp[i]}. tipo {atribuiveis[local][var]['tipo']}"
+                            )
+                    if is_list and atribuiveis["global"][atribuiveis[local][var]['tipo']]["valor"] < index:
+                        raise ValueError(
+                            f"Indice fora de alcance."
+                        )
+                    types.append(atribuiveis["global"][atribuiveis[local][var]['tipo']]['tipo2'])
             else:
                 types.append(type(exp[i]))
         for elem in types:
@@ -236,224 +115,111 @@ def check_exp(exp: list | int | str | bool, local: str) -> str:
                     Expressão: {exp}"
                 )
 
-        return types[0]
+        return types[0], exp
 
 
-def check_record_field_access(var, nome):
-    """
-    Checar se o campo que está sendo acessado existe no record
-    """
-    record_info = atribuiveis.get(var)
-
-    if not record_info or record_info["tipo"] != "record":
-        raise ValueError(
-            f"Foi utilizado (.) em uma variável que não é record: {var}."
-        )
-
-    if nome not in record_info["estrutura"]["valores"].keys():
-        raise ValueError(f"Campo desconhecido '{nome}' em {var}.")
-
-
-def salvar_json_const(consts: list):
-    json_const = []
-    for const in consts:
-        if const[0] != "CONSTANTE":
-            raise ValueError(f"Constante {const[1]} não declarada como Constante!")
-        if const[2][0] != "CONST_VALOR":
-            raise ValueError(
-                f"Valor da constante {const[1]} \
-                não definido como valor de constante!"
-            )
-        json_const.append({"nome": const[1], "valor": const[2][1]})
-
-    with open("json_const.json", "w") as jc:
-        json.dump(json_const, jc, indent=4)
-        jc.close()
-    return json_const
-
-
-def salvar_json_tipos(tipos: list):
-    json_array = []
-    json_record = []
-
-    for tipo in tipos:
-        if tipo[1][0] == "array":
-            json_array.append({
-                "nome": tipo[0],
-                "tipo": tipo[1][2],
-                "tamanho": tipo[1][1],
-                "valores": []
-            })
-        if tipo[1][0] == "record":
-            json_record.append({
-                "nome": tipo[0],
-                "valores": {
-                    nome_campo: {"tipo": tipo_campo}
-                    for nome_campo, tipo_campo in tipo[1][1]
-                }
-            })
-
-    with open("json_array.json", "w") as ja:
-        json.dump(json_array, ja, indent=4)
-        ja.close()
-
-    with open("json_record.json", "w") as jr:
-        json.dump(json_record, jr, indent=4)
-        jr.close()
-    
-    return json_array, json_record
-
-
-def salvar_json_var(vars: list):
-    """
-    {
-        "tipo": "record",
-        "valor": "dict_1",
-        "estrutura": json_record.get("dict_1").get("valores"),
-        "local": "global"
-    }
-    """
-    json_var = []
-
-    for var in vars:
-        if var[0] != "VARIAVEL":
-            raise ValueError(f"Variável {var[1]} não declarada como variável!")
-
-        tipo = var[2]
-        valor = None
-        estrutura = None
-
-        json_found = {
-            "array": get_info(var[2], "array"),
-            "record": get_info(var[2], "record"),
-            "const": get_info(var[2], "const"),
-        }
-        for key in json_found.keys():
-            if json_found[key]:
-                tipo = key
-                valor = var[2]
-                estrutura = json_found[key]
-
-        if "," in var[1]:
-            multi_var = var[1].split(",")
-            for v in multi_var:
-                json_var.append({
-                    "nome": v.strip(),
-                    "tipo": tipo if tipo != "const" else valor,
-                    "valor": valor if tipo != "const" else tipo,
-                    "estrutura": estrutura,
-                    "local": "global"
-                })
-        else:
-            json_var.append({
-                "nome": var[1].strip(),
-                "tipo": tipo if tipo != "const" else valor,
-                "valor": valor if tipo != "const" else tipo,
-                "estrutura": estrutura,
-                "local": "global"
-            })
-
-    with open("json_var.json", "w") as jv:
-        json.dump(json_var, jv, indent=4)
-    return json_var
-
-
-def criar_json_function(func: tuple):
+def extract_function(ids: dict, transcript: str, func: tuple):
     if len(func) == 0:
-        return []
+        return transcript, ids
 
-    return [{
-        "nome": func[1][2],
-        "dados": {
-            "rotina": func[1][1],
-            "params": {k: v for k, v in func[1][3][2]}
-            if func[1][3] is not None
-            else {},
-            "returns": func[1][5] if len(func[1]) == 6 else None,
-        },
-        "comandos": criar_json_comando(separar_blocos(func))
-    }] + criar_json_function(func[4])
+    transcript = extract_comando(separar_blocos(func), transcript, func[1][2], ids)
+
+    return transcript, ids
 
 
-def salvar_json_function(func: tuple):
-    json_func = criar_json_function(func)
-    with open("json_function.json", "w") as jf:
-        json.dump(json_func, jf, indent=4)
-    return json_func
+def transcript_exp(exp, ids: dict, escopo: str, indent: int = 0, register: int = 6):
+    if exp is None:
+        return ""
+    t = "\t"
+    for i in range(indent):
+        t += "\t"
+    if not isinstance(exp, list) and not isinstance(exp, tuple):
+        if isinstance(exp, str):
+            if "[" in exp:
+                exp_ = exp.split("[")
+                index = exp_[1].replace("]", "")
+                try:
+                    index = 4*int(index)
+                except ValueError as e:
+                    index = f"4*{index}"
+                exp_ = exp_[0]
+                return f"pop R2, {exp_}\n{t}lod R{register}, {index}($R2)\n{t}"
+            return f"pop R{register}, {exp}\n{t}" if ids.get(escopo).get(exp) and ids.get(escopo).get(exp).get("from") == "func" else f"lod R{register}, {exp}\n{t}"
+        return f"lod R{register}, {exp}\n{t}"
+    elif len(exp) > 2:
+        trans = ""
+        for i in range(0, len(exp), 2):
+            if not isinstance(exp[i], list) and not isinstance(exp[i], tuple):
+                trans += f"lod R{i+6}, {exp[i]}\n{t}"
+            elif isinstance(exp[i][0], str) and isinstance(exp[i][1], list):
+                trans += transcript_exp(exp[i], ids, escopo)
+                trans += f"lod R{i + 6}, R{i + 6}\n{t}"
+        for i in range(1, len(exp), 2):
+            if exp[i] == "+":
+                trans += f"add R{i+5}, R{i+7}\n{t}"
+            if exp[i] == "-":
+                trans += f"inv R{1+7}\n{t}add R{i+5}, R{i+7}\n{t}"
+            if exp[i] == "/":
+                trans += f"div R{i+5}, R{i+7}\n{t}"
+            if exp[i] == "*":
+                trans += f"lod R{len(exp)+7}, 1\n{t}inv R{len(exp)+7}\n{t}jnz pre_loop_mult, R{i+7}\n{t}lod R{i+5}, $0\n{t}pre_loop_mult:\n{t}\tadd R{i+7}, R{len(exp)+7}\n{t}\tjnz loop_mult, R{i+7}\n{t}loop_mult:\n{t}\tadd R{i+5}, R{i+5}\n{t}\tadd R{i+7}, R{len(exp)+7}\n{t}\tjnz loop_mult, R{i+7}\n{t}"
+        return trans
+    elif isinstance(exp[0], str) and isinstance(exp[1], list):
+        trans = ""
+        for i in range(len(exp[1])):
+            if ids.get(exp[0]):
+                params = [param for param in ids.get(exp[0]).keys() if ids.get(exp[0])[param].get("from") == "func"]
+                trans += f"psh R{params[i]}, {exp[1][i]}\n{t}"
+        return trans + f"jmp {exp[0]}\n{t}"
 
 
-def criar_json_var_function(func: tuple):
-    if len(func) == 0:
-        return []
-
-    if not func[2]:
-        return criar_json_var_function(func[4])
-
-    json_var = []
-
-    if func[2][1][0][0] != "VARIAVEL":
-        raise ValueError(f"Variável {func[2][1][0][1]} não declarada como variável!")
-
-    tipo = func[2][1][0][2]
-    valor = None
-    estrutura = None
-
-    json_found = {
-        "array": get_info(func[2][1][0][2], "array"),
-        "record": get_info(func[2][1][0][2], "record"),
-        "const": get_info(func[2][1][0][2], "const"),
-    }
-    for key in json_found.keys():
-        tipo = key
-        valor = func[2][1][0][2]
-        estrutura = json_found[key]
-
-    if "," in func[2][1][0][1]:
-        multi_var = func[2][1][0][1].split(",")
-        for v in multi_var:
-            json_var.append({
-                "nome": v.strip(),
-                "tipo": tipo if tipo != "const" else valor,
-                "valor": valor if tipo != "const" else tipo,
-                "estrutura": estrutura,
-                "local": func[1][2]
-            })
-    else:
-        json_var.append({
-            "nome": func[2][1][0][1].strip(),
-            "tipo": tipo if tipo != "const" else valor,
-            "valor": valor if tipo != "const" else tipo,
-            "estrutura": estrutura,
-            "local": func[1][2]
-        })
-
-    return json_var + criar_json_var_function(func[4])
-
-
-def salvar_json_var_function(func: tuple):
-    with open("json_var.json", "r") as jf:
-        json_var = json.load(jf)
-        jf.close()
-    json_var += criar_json_var_function(func)
-    with open("json_var.json", "w") as jf:
-        json.dump(json_var, jf, indent=4)
-    return json_var
-
-
-def criar_json_comando(comandos: list):
-    json_comandos = []
-
+def extract_comando(comandos: list, transcript: str, escopo: str, ids: dict, indent: int = 0):
+    must_psh = False
     for comando in comandos:
-        json_comandos.append({
-            'nome_comando': comando.get("nome_comando"),
-            'exp': tratar_exp(comando.get('exp')) if comando.get('exp') is not None else None,
-            'variavel': comando.get('variavel'),
-            'nome': comando.get('nome'),
-            'sub_comandos': comando.get('subcomandos'),
-            'sub_blocos': comando.get('sub_blocos'),
-        })
-    
-    return json_comandos
+        t = "\t"
+        for i in range(indent):
+            t += "\t"
+        treated_exp = check_exp(tratar_exp(comando.get('exp')), escopo, ids) if comando.get('exp') is not None else None
+        if comando.get("nome_comando") == "write":
+            transcript += f"{t}lod R1, {treated_exp[1]}\n{t}write R1\n"
+        elif comando.get("nome_comando") == "read":
+            transcript += f"{t}read {comando.get('variavel')}.{comando.get('nome')}\n{t}lod R{comando.get('variavel')}, {comando.get('variavel')}.{comando.get('nome')}\n"
+        elif comando.get("nome_comando") == "ATRIB":
+            must_psh = True
+            if not treated_exp:
+                transcript += f"{t}str R8 {comando.get('variavel')}\n"
+            else:
+                transcript += f"{t}{transcript_exp(treated_exp[1], ids, escopo, indent)}str R6 {comando.get('variavel')}\n"
+        elif comando.get("nome_comando") == "while":
+            transcript += f"{t}jmp loop\n{t}loop:\n\t"
+            treated_exp = treated_exp[1]
+            if treated_exp[1] == ">":
+                transcript += f"{t}lod R{treated_exp[2]}, {treated_exp[0]}\n{t}\tlod R{treated_exp[0]}, {treated_exp[2]}\n{t}\tles R{treated_exp[2]}, R{treated_exp[0]}\n{t}\tjnz end_loop R{treated_exp[2]}\n"
+            elif treated_exp[1] == "<":
+                transcript += f"{t}lod R{treated_exp[0]}, {treated_exp[0]}\n{t}\tlod R{treated_exp[2]}, {treated_exp[2]}\n{t}\tles R{treated_exp[2]}, R{treated_exp[0]}\n{t}\tjnz end_loop R{treated_exp[2]}\n"
+            elif treated_exp[1] == "=":
+                transcript += f"{t}lod R{treated_exp[0]}, {treated_exp[0]}\n{t}\tlod R{treated_exp[2]}, {treated_exp[2]}\n{t}\teql R{treated_exp[2]}, R{treated_exp[0]}\n{t}\tjnz end_loop R{treated_exp[2]}\n"
+            if comando.get('sub_blocos'):
+                transcript = extract_comando(comando.get('sub_blocos'), transcript, escopo, ids, indent=indent+1)
+            transcript += f"{t}\tjmp loop\n{t}end_loop:\n{t}"
+        elif comando.get("nome_comando") == "if":
+            treated_exp = treated_exp[1]
+            if treated_exp[1] == ">":
+                transcript += f"{t}{transcript_exp(treated_exp[2], ids, escopo, indent, register=6)}{transcript_exp(treated_exp[0], ids, escopo, indent, register=8)}les R6, R8\n"
+            elif treated_exp[1] == "<":
+                transcript += f"{t}{transcript_exp(treated_exp[0], ids, escopo, indent, register=6)}{transcript_exp(treated_exp[2], ids, escopo, indent, register=8)}les R6, R8\n"
+            elif treated_exp[1] == "=":
+                transcript += f"{t}{transcript_exp(treated_exp[0], ids, escopo, indent, register=6)}{transcript_exp(treated_exp[2], ids, escopo, indent, register=8)}eql R6, R8\n"
+            transcript += f"{t}jnz then R6\n"
+            transcript += f"{t}jmp else\n" if comando.get("else") else ""
+            transcript += f"{t}then:\n"
+            if comando.get('sub_blocos'):
+                transcript = extract_comando(comando.get('sub_blocos'), transcript, escopo, ids, indent=indent+1)
+            if comando.get('else'):
+                transcript += f"{t}else:\n"
+                transcript = extract_comando(comando.get('else'), transcript, escopo, ids, indent=indent+1)
+    transcript += f"\tpsh R6\n" if must_psh and not indent else ""
+    return transcript
 
 
 def tratar_exp(exp: tuple):
@@ -481,6 +247,8 @@ def tratar_exp(exp: tuple):
             elif isinstance(exp[0][1], list):
                 for count, xp in enumerate(exp[0][1]):
                     exp[0][1][count] = xp[0] if not xp[1] else xp
+            elif isinstance(exp[0][1], tuple):
+                exp[0] = f"{exp[0][0]}[{exp[0][1][0]}]"
         if isinstance(exp[2], tuple):
             if exp[2][1] is None:
                 exp[2] = exp[2][0]
@@ -490,21 +258,9 @@ def tratar_exp(exp: tuple):
         return exp
 
 
-def salvar_json_comandos(comandos: list):
-    json_comandos = criar_json_comando(comandos)
-    with open("json_comando.json", "w") as jc:
-        json.dump(json_comandos, jc, indent=4)
-    return json_comandos
+def separar_defs(arvore, transcript: str, escopo="global", ids_: dict = None):
 
-
-def separar_defs(arvore):
-    defs = {}
-    def_names = {
-        "DEF_CONST": "json_const",
-        "DEF_TIPOS": "json_tipos",
-        "DEF_VAR": "json_var",
-        "DEF_ROT": "json_func",
-    }
+    ids = {escopo: {}} if not ids_ else ids_
 
     for item in arvore[0]:
         if (
@@ -513,9 +269,127 @@ def separar_defs(arvore):
             and isinstance(item[0], str)
             and item[0].startswith("DEF")
         ):
-            defs[def_names[item[0]]] = item[1:][0] if item[0] != "DEF_ROT" else item
+            itens = item[1:][0] if item[0] != "DEF_ROT" else item
+            if item[0] == "DEF_CONST":
+                for const in itens:
+                    if const[0] != "CONSTANTE":
+                        raise ValueError(f"Constante {const[1]} não declarada como Constante!")
+                    if const[2][0] != "CONST_VALOR":
+                        raise ValueError(
+                            f"Valor da constante {const[1]} \
+                            não definido como valor de constante!"
+                        )
+                    if const[1] in ids[escopo].keys():
+                        raise ValueError(f"Identificador '{const[1]}' já foi declarado.")
+                    ids[escopo] |= {const[1]: {
+                            "tipo": type(const[2][1]),
+                            "valor": const[2][1],
+                            "from": "const"
+                        }
+                    }
+                    transcript += f"\tCONST {const[1]}: {const[2][1]}\n"
+            elif item[0] == "DEF_TIPOS":
+                for tipo in itens:
+                    if tipo[0] in ids[escopo].keys():
+                        raise ValueError(f"Identificador '{tipo[0]}' já foi declarado.")
+                    if tipo[1][0] == "array":
+                        transcript += f"\tARRAY {tipo[0]} {tipo[1][2]} {tipo[1][1]}\n"
+                        ids[escopo] |= {tipo[0]: {
+                                "tipo": list,
+                                "tipo2": tipo[1][2],
+                                "valor": tipo[1][1],
+                                "from": "tipos"
+                            }
+                        }
+                    elif tipo[1][0] == "record":
+                        ids[escopo] |= {tipo[0]: {
+                                "tipo": dict,
+                                "valor": tipo[1][1],
+                                "from": "tipos"
+                            }
+                        }
+                        transcript += f"\tRECORD {tipo[0]}\n"
+                        for nome_campo, tipo_campo in tipo[1][1]:
+                            transcript += f"\t\t{nome_campo} {tipo_campo}\n"
+            elif item[0] == "DEF_VAR":
+                for var in itens:
+                    if var[0] != "VARIAVEL":
+                        raise ValueError(f"Variável {var[1]} não declarada como variável!")
 
-    return defs
+                    tipo = var[2]
+                    valor = None
+                    
+                    if ids[escopo].get(var[2]):
+                        tipo = ids[escopo][var[2]]["tipo"] if ids[escopo][var[2]]["tipo"] not in [list, dict] else var[2]
+                        valor = ids[escopo][var[2]]["valor"]
+                    elif var[2] not in type_.keys():
+                        raise ValueError("Tentativa de atribuir tipo não existente.")
+
+                    if "," in var[1]:
+                        multi_var = var[1].split(",")
+                        for v in multi_var:
+                            if v.strip() in ids[escopo].keys():
+                                raise ValueError(f"Identificador '{tipo[0]}' já foi declarado.")
+                            ids[escopo] |= {v.strip(): {
+                                    "tipo": tipo if tipo != "const" else valor,
+                                    "valor": valor if tipo != "const" else tipo,
+                                    "from": "var"
+                                }
+                            }
+                            transcript += f"\tVAR {v.strip()} {tipo if tipo != 'const' else valor}\n"
+                    else:
+                        if var[1].strip() in ids[escopo].keys():
+                            raise ValueError(f"Identificador '{tipo[0]}' já foi declarado.")
+                        ids[escopo] |= {var[1].strip(): {
+                                "tipo": tipo if tipo != "const" else valor,
+                                "valor": valor if tipo != "const" else tipo,
+                                "from": "var"
+                            }
+                        }
+                        transcript += f"\tVAR {var[1].strip()} {tipo}\n"
+            elif item[0] == "DEF_ROT":
+                if item[1][3] is not None:
+                    for k, v in item[1][3][2]:
+                        if ids.get(item[1][2]):
+                            ids[item[1][2]] |= {
+                                k: {
+                                    "tipo": v,
+                                    "valor": None,
+                                    "from": "func"
+                                }
+                            }
+                        else:
+                            ids[item[1][2]] = {
+                                k: {
+                                    "tipo": v,
+                                    "valor": None,
+                                    "from": "func"
+                                }
+                            }
+                if ids.get(item[1][2]):
+                    ids[item[1][2]] |= {
+                        "returns": {"tipo": item[1][5] if len(item[1]) == 6 else None}
+                    }
+                else:
+                    ids[item[1][2]] = {
+                        "returns": {"tipo": item[1][5] if len(item[1]) == 6 else None}
+                    }
+
+                transcript += f"{item[1][2]}:\n"
+
+                if item[2]:
+                    t, i = separar_defs([[item[2]]], transcript, item[1][2], ids)
+                    transcript = t
+                    ids |= i
+                t, i = extract_function(ids, transcript, item)
+                transcript = t
+                ids |= i
+                if len(item[4]) > 0:
+                    t, i = separar_defs([[item[4]]], transcript, ids_=ids)
+                    transcript = t
+                    ids |= i
+
+    return transcript, ids
 
 
 def separar_blocos(arvore):
@@ -523,7 +397,7 @@ def separar_blocos(arvore):
 
     for item in arvore:
         if isinstance(item, tuple) and len(item) > 0 and isinstance(item[0], str) and item[0] == 'BLOCO':
-            comandos = item[1]
+            comandos = item[1] if isinstance(item[1], list) else [item[1]]
             blocos += separar_comandos(comandos)
 
     return blocos
@@ -533,13 +407,15 @@ def separar_comandos(comandos):
     resultado = []
 
     for comando in comandos:
+        if comando is None:
+            return []
         if comando[1] == "while":
             _, nome_comando, exp, sub_comandos, sub_bloco = comando
             resultado.append({
                 'nome_comando': nome_comando,
                 'exp': exp,
                 'sub_comandos': sub_comandos,
-                'sub_blocos': separar_blocos(sub_bloco)
+                'sub_blocos': separar_blocos([sub_bloco])
             })
         elif comando[1] == "if":
             if len(comando) == 6:
@@ -548,8 +424,8 @@ def separar_comandos(comandos):
                     'nome_comando': nome_comando,
                     'exp': exp,
                     'sub_comandos': sub_comandos,
-                    'sub_blocos': separar_blocos(sub_bloco),
-                    'else': separar_blocos(_else[1])
+                    'sub_blocos': separar_blocos([sub_bloco]),
+                    'else': separar_blocos([_else[1]]) if _else else ""
                 })
             else:
                 _, nome_comando, exp, sub_comandos, sub_bloco = comando
@@ -557,7 +433,7 @@ def separar_comandos(comandos):
                     'nome_comando': nome_comando,
                     'exp': exp,
                     'sub_comandos': sub_comandos,
-                    'sub_blocos': separar_blocos(sub_bloco)
+                    'sub_blocos': separar_blocos([sub_bloco])
                 })
         elif comando[1] == "return" or comando[1] == "write":
             _, nome_comando, exp = comando
@@ -574,7 +450,7 @@ def separar_comandos(comandos):
                 'nome': nome
             })
         
-        else:
+        elif len(comando) == 4:
             _, variavel, nome, exp = comando
             resultado.append({
                 'nome_comando': "ATRIB",
@@ -591,19 +467,9 @@ def read_tree(name: str):
         tree = f.read()
 
     arvore = ast.literal_eval(tree)
-    defs_separadas = separar_defs(arvore)
-    count = 0
-    json_const = salvar_json_const(defs_separadas["json_const"])
-    json_array, json_record = salvar_json_tipos(defs_separadas["json_tipos"])
-    json_var = salvar_json_var(defs_separadas["json_var"])
-    json_func = salvar_json_function(defs_separadas["json_func"])
-    json_var = salvar_json_var_function(defs_separadas["json_func"])
-
-    for json_data in [json_const, json_array, json_record, json_var, json_func]:
-        check_declaration(json_data)
-
+    defs_separadas, ids = separar_defs(arvore, "")
     comandos = separar_blocos(arvore)
-    json_comandos = salvar_json_comandos(comandos)
+    defs_separadas += "\nmain:\n" + extract_comando(comandos, "", "global", ids)
 
-    create_atribs(json_func, json_var, json_const)
-    check_comands(json_comandos, json_func)
+    with open("transcricao_cod_inter.txt", "w") as f:
+        f.write(defs_separadas)

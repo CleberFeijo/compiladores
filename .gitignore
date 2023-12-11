@@ -16,6 +16,10 @@ __pycache__/
 
 transcricao.txt
 
+transcricao_cod_inter
+transcricao_cod_inter.txt
+transcricao_luan.txt
+transcricao_mips.txt
 json*
 
 trash.py

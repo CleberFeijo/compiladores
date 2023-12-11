@@ -1,5 +1,5 @@
 #!/usr/bin/python
-import errors
+
 import grammar
 
 data = """
@@ -53,6 +53,19 @@ begin
     return result;
 end
 
+function menor(a : vetor) : integer
+var i, result : integer;
+begin
+    i := 0;
+    result := a[1];
+    while i < 15 do
+    begin
+        if a[i] < result then : result := a[i];
+        i := i + 1;
+    end;
+    return result;
+end
+
 function maior(a : vetor) : integer
 var i, result : integer;
 begin
@@ -71,24 +84,6 @@ var m : integer;
 begin
     m := maior(a) + menor(a);
     return m / 2;
-end
-
-function teste : integer
-begin
-    return 2 + 2;
-end
-
-function menor(a : vetor) : integer
-var i, result : integer;
-begin
-    i := 0;
-    result := a[1];
-    while i < 15 do
-    begin
-        if a[i] < result then : result := a[i];
-        i := i + 1;
-    end;
-    return result;
 end
 
 begin
